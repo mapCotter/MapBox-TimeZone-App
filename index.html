@@ -1,0 +1,235 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>MapBox Test</title>
+<meta name='viewport' content='width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no' />
+<script src='https://api.tiles.mapbox.com/mapbox.js/v1.6.1/mapbox.js'></script>
+<link href='https://api.tiles.mapbox.com/mapbox.js/v1.6.1/mapbox.css' rel='stylesheet' />
+<link rel="stylesheet" href="http://code.jquery.com/mobile/1.4.0/jquery.mobile-1.4.0.min.css" />
+<script src="http://code.jquery.com/jquery-1.9.1.min.js"></script>
+<script src="http://code.jquery.com/mobile/1.4.0/jquery.mobile-1.4.0.min.js"></script>
+<script src="https://timezonedb.googlecode.com/files/timezonedb.js" type="text/javascript"></script>
+<style>
+  body { margin:0; padding:0; }
+  #map { position:absolute; top:0; bottom:0; width:100%; }
+</style>
+
+</head>
+
+<body>
+
+<script src='https://api.tiles.mapbox.com/mapbox.js/plugins/leaflet-locatecontrol/v0.21.0/L.Control.Locate.js'></script>
+<link href='https://api.tiles.mapbox.com/mapbox.js/plugins/leaflet-locatecontrol/v0.21.0/L.Control.Locate.css' rel='stylesheet' />
+<!--[if lt IE 9]>
+  <link href='//api.tiles.mapbox.com/mapbox.js/plugins/leaflet-locatecontrol/v0.21.0/L.Control.Locate.ie.css' rel='stylesheet' />
+<![endif]-->
+
+<style type="text/css">
+    .leaflet-control-locate {
+        border: 1px solid rgba(0,0,0,0.4);
+    }
+
+    .leaflet-control-locate a {
+        background-color: #fff;
+        background-position: -3px, -2px;
+    }
+
+    .leaflet-control-locate.active a {
+        background-position: -33px -2px;
+    }
+	 #map-ui {
+    position:absolute;
+    top:10px;right:10px;
+    z-index:100;
+    }
+    #map-ui ul {
+      list-style:none;
+      margin:0;padding:0;
+      }
+      #map-ui a {
+        font-size:13px;
+        background:#FFF;
+        color:#3C4E5A;
+        display:block;
+        margin:0;padding:0;
+        border:1px solid #BBB;
+        border-bottom-width:0;
+        min-width:138px;
+        padding:10px;
+        text-decoration:none;
+        }
+      #map-ui a:hover { background:#ECF5FA; }
+      #map-ui li:last-child a {
+        border-bottom-width:1px;
+        -webkit-border-radius:0 0 3px 3px;
+                border-radius:0 0 3px 3px;
+        }
+      #map-ui li:first-child a {
+        -webkit-border-radius:3px 3px 0 0;
+                border-radius:3px 3px 0 0;
+              }
+      #map-ui a.active {
+        background:#3887BE;
+        border-color:#3887BE;
+        color:#FFF;
+        }
+        #map-ui li:last-child a.active {
+          border-top-color:#FFF;
+          }
+</style>
+
+<div id='map'>
+ 
+</div>
+<div id='map-ui'>
+    <ul>
+      <li><a href='#' class='active' id='precipitation'>Precipitation</a></li>
+      <li><a href='#' id='geolocate'>Find me</a></li>
+      <li><a href='#' id='clearMarkers'>Clear Markers</a></li>
+    </ul>
+  </div>
+<script>
+var map = L.mapbox.map('map', 'cotter.h72m299j');
+//ADD geocode place finder to the app
+	map.addControl(L.mapbox.geocoderControl('cotter.h72m299j'));
+	
+//Add Geolocation to the app   
+    L.control.locate().addTo(map);
+
+var markerLayer;	
+//Add Weather Radar
+	var precipitation = L.tileLayer.wms("http://nowcoast.noaa.gov/wms/com.esri.wms.Esrimap/obs", {
+    format: 'image/png',
+    transparent: true,
+    layers: 'RAS_RIDGE_NEXRAD'
+}).addTo(map);
+
+	$("#precipitation").on( "click", function(event, ui) {		
+		var enable = this.className !== 'active';
+		precipitation.setOpacity(enable ? 1 : 0);
+		this.className = enable ? 'active' : '';
+		return false;
+	});
+	$("#clearMarkers").on( "click", function(event, ui) {	
+		map.removeLayer(markerLayer);
+	});
+
+	//Get Time & Time Zone From Map Click
+	var markerlat, markerlon;
+	map.on('mouseclick click', function(e) {
+		if(markerLayer){
+			map.removeLayer(markerLayer);
+		}
+		markerlat = e.latlng.lat.toString();
+		markerlon =  e.latlng.lng.toString();
+		 
+		 displayZone(markerlat, markerlon)
+		//window[e.type].innerHTML = e.containerPoint.toString() + ', ' + e.latlng.toString();
+	}); 
+
+function displayZone(lat, lng){
+	var tz = new TimeZoneDB;
+	tz.getJSON({
+		key: "HMVQ3JZ4W8KU",
+		lat: lat,
+		lng: lng
+	}, function(data){
+		var date = new Date(data.timestamp*1000);
+		// hours part from the timestamp
+		var hours = date.getHours();
+		// minutes part from the timestamp
+		var minutes = date.getMinutes();
+		// seconds part from the timestamp
+		var seconds = date.getSeconds();
+		
+		// will display time in 10:30:23 format
+		var formattedTime = formattedTimeFromTimestamp(data.timestamp);
+		addPlaceMarker(data.zoneName, formattedTime);
+		//alert("Time Zone: " + data.zoneName + " Time: " + formattedTime);
+		
+	});	
+}
+function addPlaceMarker(timeZone, formattedTime){
+	markerLayer = L.mapbox.markerLayer({
+	//markerLayer = map.markerLayer.setGeoJSON({
+        type: "Feature",
+        geometry: {
+        type: 'Point',
+        // coordinates here are in longitude, latitude order because
+        // x, y is the standard for GeoJSON and many formats
+        coordinates: [markerlon, markerlat]
+    },
+    properties: {
+        title: 'Zone: ' + timeZone,
+        description: "Time: " + formattedTime,
+        // one can customize markers by adding simplestyle properties
+        // http://mapbox.com/developers/simplestyle/
+        'marker-size': 'medium',
+        'marker-color': '#f0a',
+        'marker-symbol': 'star-stroked'
+    }
+    // this feature is in the GeoJSON format: see geojson.org
+    // for the full specification
+    
+});
+	map.addLayer(markerLayer);
+	markerLayer.openPopup();
+	
+}
+function twoDigits(value) {
+   if(value < 10) {
+    return '0' + value;
+   }
+   return value;
+}
+function formattedTimeFromTimestamp(timestamp)
+{
+     var a = new Date(timestamp*1000);
+     var hour = twoDigits(a.getUTCHours());
+     var mins = twoDigits(a.getUTCMinutes());
+     var sec = twoDigits(a.getUTCSeconds());
+     var time = hour+':'+mins+':'+sec ;
+     return time;
+}
+
+//find TimeZone for Current Location
+if (!navigator.geolocation) {
+    geolocate.innerHTML = 'geolocation is not available';
+} else {
+    geolocate.onclick = function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        map.locate();
+    };
+}
+
+// Once we've got a position, zoom and center the map
+// on it, and add a single marker.
+map.on('locationfound', function(e) {
+    map.fitBounds(e.bounds);
+
+    map.markerLayer.setGeoJSON({
+        type: "Feature",
+        geometry: {
+            type: "Point",
+            coordinates: [e.latlng.lng, e.latlng.lat]
+        },
+        properties: {
+            'marker-color': '#000',
+            'marker-symbol': 'star-stroked'
+        }
+    });
+	displayZone(e.latlng.lat, e.latlng.lng)
+    // And hide the geolocation button
+   // geolocate.parentNode.removeChild(geolocate);
+});
+
+// If the user chooses not to allow their location
+// to be shared, display an error message.
+map.on('locationerror', function() {
+    geolocate.innerHTML = 'position could not be found';
+});
+</script>
+</body>
+</html>
